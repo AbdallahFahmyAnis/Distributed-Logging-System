@@ -1,0 +1,118 @@
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/jquery.validation/1.19.5/jquery.validate.min.js"></script>
+<script src="~/ckeditor5-build-classic/ckeditor.js"></script>
+<script src="~/ckeditor5-build-classic/translations/ar.js"></script>
+<script src="~/js/publishandsurviey/create.js" asp-append-version="true"></script>
+<script>
+    // Configure jQuery Validation to ignore CKEditor elements BEFORE initializing CKEditor
+    if (window.jQuery && jQuery.validator) {
+        jQuery.validator.setDefaults({
+            ignore: ".ck-editor__editable, .ck *, [contenteditable='true']"
+        });
+        
+        // Override the focusout handler to prevent validation errors on CKEditor elements
+        const originalFocusout = jQuery.validator.defaults.onfocusout;
+        jQuery.validator.defaults.onfocusout = function(element) {
+            // Skip validation for CKEditor elements
+            if (jQuery(element).hasClass('ck-editor__editable') || 
+                jQuery(element).closest('.ck-editor').length > 0 ||
+                jQuery(element).attr('contenteditable') === 'true') {
+                return;
+            }
+            
+            // Call the original validation logic for other elements
+            if (originalFocusout) {
+                originalFocusout.call(this, element);
+            } else {
+                if (!this.checkable(element) && (element.name in this.submitted || !this.optional(element))) {
+                    this.element(element);
+                }
+            }
+        };
+    }
+
+    ClassicEditor.create(document.querySelector('#ProjectSummary'), {
+        removePlugins: ['CKFinderUploadAdapter', 'CKFinder', 'EasyImage', 'Image', 'ImageCaption', 'ImageStyle', 'ImageToolbar', 'ImageUpload', 'MediaEmbed'],
+        toolbar: [
+            'heading', '|',
+            'bold', 'italic', 'link', '|',
+            'numberedList', 'bulletedList', '|',
+            'insertTable', '|',
+            'undo', 'redo'
+        ],
+        language: 'ar',
+        contentLanguage: 'ar'
+    })
+    .then(editor => {
+        window.editor = editor;
+        
+        // Get the original element
+        const originalElement = document.querySelector('#ProjectSummary');
+        
+        // Ensure the original element has a name attribute for validation
+        if (!originalElement.name && originalElement.id) {
+            originalElement.name = originalElement.id;
+        }
+
+        // Enable manual resizing with CSS - vertical only
+        const editorElement = editor.ui.getEditableElement();
+        editorElement.style.resize = 'vertical';
+        editorElement.style.overflow = 'auto';
+        editorElement.style.height = '75px';
+        editorElement.style.minHeight = '75px';
+        
+        // Fix for jQuery Validate - update hidden field on content change
+        editor.model.document.on('change:data', () => {
+            const data = editor.getData();
+            originalElement.value = data;
+
+            // Trigger validation on the original element with safety checks
+            if (window.jQuery && jQuery('#ProjectSummary').length > 0) {
+                const $element = jQuery('#ProjectSummary');
+                const form = $element.closest('form');
+                const validator = form.data('validator');
+                
+                if (validator && typeof validator.element === 'function') {
+                    try {
+                        validator.element($element[0]);
+                    } catch (e) {
+                        console.warn('Validation error caught and ignored:', e);
+                    }
+                }
+            }
+        });
+
+        // Also update on blur to ensure validation works
+        editor.ui.focusTracker.on('change:isFocused', (evt, data, isFocused) => {
+            if (!isFocused) {
+                const data = editor.getData();
+                originalElement.value = data;
+
+                if (window.jQuery && jQuery('#ProjectSummary').length > 0) {
+                    const $element = jQuery('#ProjectSummary');
+                    const form = $element.closest('form');
+                    const validator = form.data('validator');
+                    
+                    if (validator && typeof validator.element === 'function') {
+                        // Use setTimeout to ensure the blur event completes first
+                        setTimeout(() => {
+                            try {
+                                validator.element($element[0]);
+                            } catch (e) {
+                                console.warn('Validation error caught and ignored:', e);
+                            }
+                        }, 100);
+                    }
+                }
+            }
+        });
+        
+        // Initial sync of content
+        const initialData = editor.getData();
+        originalElement.value = initialData;
+    })
+    .catch(err => {
+        console.error('CKEditor initialization error:', err.stack);
+    });
+</script>
